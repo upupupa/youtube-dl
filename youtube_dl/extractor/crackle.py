@@ -75,6 +75,7 @@ class CrackleIE(InfoExtractor):
 
         last_e = None
 
+        un_drm = False
         for country in countries:
             try:
                 # Authorization generation algorithm is reverse engineered from:
@@ -103,8 +104,10 @@ class CrackleIE(InfoExtractor):
 
             formats = []
             for e in media['MediaURLs']:
-                if e.get('UseDRM') is True:
+                # a stringified truth value, not a boolean
+                if e.get('UseDRM') == 'True':
                     continue
+                un_drm = True
                 format_url = url_or_none(e.get('Path'))
                 if not format_url:
                     continue
@@ -130,6 +133,12 @@ class CrackleIE(InfoExtractor):
                         'width': mfs_info['width'],
                         'height': mfs_info['height'],
                     })
+            if not formats:
+                if not un_drm:
+                    last_e = ExtractorError('No non-DRM video formats found', expected=True)
+                else:
+                    last_e = ExtractorError('No video formats found', expected=True)
+                continue
             self._sort_formats(formats)
 
             description = media.get('Description')
