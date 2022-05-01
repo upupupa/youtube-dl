@@ -17,10 +17,12 @@ from ..utils import (
     float_or_none,
     mimetype2ext,
     str_or_none,
+    strip_or_none,
     try_get,
     unified_timestamp,
     update_url_query,
     url_or_none,
+    urljoin,
 )
 
 
@@ -56,6 +58,7 @@ class DRTVIE(InfoExtractor):
             'release_year': 2016,
         },
         'expected_warnings': ['Unable to download f4m manifest'],
+        'skip': 'Gone: Siden, du leder efter, blev desværre ikke fundet!',
     }, {
         # embed
         'url': 'https://www.dr.dk/nyheder/indland/live-christianias-rydning-af-pusher-street-er-i-gang',
@@ -76,13 +79,14 @@ class DRTVIE(InfoExtractor):
         # with SignLanguage formats
         'url': 'https://www.dr.dk/tv/se/historien-om-danmark/-/historien-om-danmark-stenalder',
         'info_dict': {
-            'id': 'historien-om-danmark-stenalder',
+            'id': 'urn:dr:ocs:tv:content:playable:00831690010',
+            'display_id': 'historien-om-danmark-stenalder',
             'ext': 'mp4',
             'title': 'Historien om Danmark: Stenalder',
             'description': 'md5:8c66dcbc1669bbc6f873879880f37f2a',
             'timestamp': 1546628400,
             'upload_date': '20190104',
-            'duration': 3502.56,
+            'duration': 3504.618,
             'formats': 'mincount:20',
         },
         'params': {
@@ -94,12 +98,12 @@ class DRTVIE(InfoExtractor):
     }, {
         'url': 'https://www.dr.dk/drtv/se/bonderoeven_71769',
         'info_dict': {
-            'id': '00951930010',
+            'id': 'urn:dr:ocs:tv:content:playable:00951930010',
             'ext': 'mp4',
-            'title': 'Bonderøven (1:8)',
-            'description': 'md5:3cf18fc0d3b205745d4505f896af8121',
-            'timestamp': 1546542000,
-            'upload_date': '20190103',
+            'title': 'Bonderøven 2019 (1:8)',
+            'description': 'md5:b6dcfe9b6f0bea6703e9a0092739a5bd',
+            'timestamp': 1603188600,
+            'upload_date': '20201020',
             'duration': 2576.6,
         },
         'params': {
@@ -116,14 +120,22 @@ class DRTVIE(InfoExtractor):
         'only_matching': True,
     }]
 
-    def _real_extract(self, url):
-        video_id = self._match_id(url)
+    def _extract_page_json(self, webpage, video_id):
+        hydration = self._parse_json(
+            self._search_regex(
+                r'<script\b[^>]*>\s*(?:window\s*\.|var\s)\s*__data\s*=\s*(\{.*?}})\s*(?:;|</script)',
+                webpage, 'hydration JSON', fatal=False) or '{}',
+            video_id)
+        return try_get(hydration, lambda x: x['cache']['page'], dict) or {}
 
-        webpage = self._download_webpage(url, video_id)
+    def _real_extract(self, url):
+        display_id = self._match_id(url)
+
+        webpage = self._download_webpage(url, display_id)
 
         if '>Programmet er ikke længere tilgængeligt' in webpage:
             raise ExtractorError(
-                'Video %s is not available' % video_id, expected=True)
+                'Video %s is not available' % display_id, expected=True)
 
         video_id = self._search_regex(
             (r'data-(?:material-identifier|episode-slug)="([^"]+)"',
@@ -144,16 +156,13 @@ class DRTVIE(InfoExtractor):
             programcard_url = '%s/%s' % (_PROGRAMCARD_BASE, video_id)
         else:
             programcard_url = _PROGRAMCARD_BASE
-            page = self._parse_json(
-                self._search_regex(
-                    r'data\s*=\s*({.+?})\s*(?:;|</script)', webpage,
-                    'data'), '1')['cache']['page']
+            page = self._extract_page_json(webpage, display_id)
             page = page[list(page.keys())[0]]
             item = try_get(
                 page, (lambda x: x['item'], lambda x: x['entries'][0]['item']),
                 dict)
-            video_id = item['customId'].split(':')[-1]
-            query['productionnumber'] = video_id
+            video_id = item['customId']
+            query['productionnumber'] = video_id.split(':')[-1]
 
         data = self._download_json(
             programcard_url, video_id, 'Downloading video JSON', query=query)
@@ -282,6 +291,7 @@ class DRTVIE(InfoExtractor):
 
         return {
             'id': video_id,
+            'display_id': display_id,
             'title': title,
             'description': description,
             'thumbnail': thumbnail,
