@@ -11,16 +11,21 @@ from ..aes import aes_cbc_decrypt
 from ..compat import compat_urllib_parse_unquote
 from ..utils import (
     bytes_to_intlist,
+    error_to_compat_str,
     ExtractorError,
+    get_element_by_class,
     int_or_none,
     intlist_to_bytes,
     float_or_none,
     mimetype2ext,
+    parse_age_limit,
     str_or_none,
+    strip_or_none,
     try_get,
     unified_timestamp,
     update_url_query,
     url_or_none,
+    urljoin,
 )
 
 
@@ -34,8 +39,9 @@ class DRTVIE(InfoExtractor):
                         (?P<id>[\da-z_-]+)
                     '''
     _GEO_BYPASS = False
-    _GEO_COUNTRIES = ['DK']
+    _GEO_COUNTRIES = ['DK', 'FO', 'GL']
     IE_NAME = 'drtv'
+    IE_DESC = 'DRTV catch-up and streaming'
     _TESTS = [{
         'url': 'https://www.dr.dk/tv/se/boern/ultra/klassen-ultra/klassen-darlig-taber-10',
         'md5': '25e659cccc9a2ed956110a299fdf5983',
@@ -56,17 +62,20 @@ class DRTVIE(InfoExtractor):
             'release_year': 2016,
         },
         'expected_warnings': ['Unable to download f4m manifest'],
+        'skip': 'Gone: Siden, du leder efter, blev desværre ikke fundet!',
     }, {
         # embed
         'url': 'https://www.dr.dk/nyheder/indland/live-christianias-rydning-af-pusher-street-er-i-gang',
         'info_dict': {
-            'id': 'urn:dr:mu:programcard:57c926176187a50a9c6e83c6',
+            'id': 'live-christianias-rydning-af-pusher-street-er-i-gang',
+            'display_id': '57c926176187a50a9c6e83c6',
             'ext': 'mp4',
             'title': 'christiania pusher street ryddes drdkrjpo',
             'description': 'md5:2a71898b15057e9b97334f61d04e6eb5',
             'timestamp': 1472800279,
             'upload_date': '20160902',
             'duration': 131.4,
+            'episode_id': 'urn:dr:mu:programcard:57c926176187a50a9c6e83c6',
         },
         'params': {
             'skip_download': True,
@@ -82,7 +91,7 @@ class DRTVIE(InfoExtractor):
             'description': 'md5:8c66dcbc1669bbc6f873879880f37f2a',
             'timestamp': 1546628400,
             'upload_date': '20190104',
-            'duration': 3502.56,
+            'duration': 3504.618,
             'formats': 'mincount:20',
         },
         'params': {
@@ -94,13 +103,15 @@ class DRTVIE(InfoExtractor):
     }, {
         'url': 'https://www.dr.dk/drtv/se/bonderoeven_71769',
         'info_dict': {
-            'id': '00951930010',
+            'id': 'bonderoeven_71769',
             'ext': 'mp4',
-            'title': 'Bonderøven (1:8)',
-            'description': 'md5:3cf18fc0d3b205745d4505f896af8121',
-            'timestamp': 1546542000,
-            'upload_date': '20190103',
+            'title': 'Bonderøven 2019 (1:8)',
+            'display_id': '00951930010',
+            'description': 'md5:b6dcfe9b6f0bea6703e9a0092739a5bd',
+            'timestamp': 1603188600,
+            'upload_date': '20201020',
             'duration': 2576.6,
+            'episode_id': 'urn:dr:ocs:tv:content:playable:00951930010',
         },
         'params': {
             'skip_download': True,
@@ -116,14 +127,25 @@ class DRTVIE(InfoExtractor):
         'only_matching': True,
     }]
 
-    def _real_extract(self, url):
-        video_id = self._match_id(url)
+    def _extract_page_json(self, webpage, video_id):
+        hydration = self._parse_json(
+            self._search_regex(
+                r'<script\b[^>]*>\s*(?:window\s*\.|var\s)\s*__data\s*=\s*(\{.*?}})\s*(?:;|</script)',
+                webpage, 'hydration JSON', fatal=False) or '{}',
+            video_id)
+        return try_get(hydration, lambda x: x['cache']['page'], dict) or {}
 
-        webpage = self._download_webpage(url, video_id)
+    def _extract_age_limit(self, webpage):
+        return parse_age_limit(get_element_by_class('classification-rating', webpage))
+
+    def _real_extract(self, url):
+        display_id = self._match_id(url)
+
+        webpage = self._download_webpage(url, display_id)
 
         if '>Programmet er ikke længere tilgængeligt' in webpage:
             raise ExtractorError(
-                'Video %s is not available' % video_id, expected=True)
+                'Video %s is not available' % display_id, expected=True)
 
         video_id = self._search_regex(
             (r'data-(?:material-identifier|episode-slug)="([^"]+)"',
@@ -144,16 +166,13 @@ class DRTVIE(InfoExtractor):
             programcard_url = '%s/%s' % (_PROGRAMCARD_BASE, video_id)
         else:
             programcard_url = _PROGRAMCARD_BASE
-            page = self._parse_json(
-                self._search_regex(
-                    r'data\s*=\s*({.+?})\s*(?:;|</script)', webpage,
-                    'data'), '1')['cache']['page']
+            page = self._extract_page_json(webpage, display_id)
             page = page[list(page.keys())[0]]
             item = try_get(
                 page, (lambda x: x['item'], lambda x: x['entries'][0]['item']),
                 dict)
-            video_id = item['customId'].split(':')[-1]
-            query['productionnumber'] = video_id
+            video_id = item['customId']
+            query['productionnumber'] = video_id.rsplit(':', 1)[-1]
 
         data = self._download_json(
             programcard_url, video_id, 'Downloading video JSON', query=query)
@@ -205,7 +224,7 @@ class DRTVIE(InfoExtractor):
                 thumbnail = url_or_none(asset.get('Uri'))
             elif kind in ('VideoResource', 'AudioResource'):
                 duration = float_or_none(asset.get('DurationInMilliseconds'), 1000)
-                restricted_to_denmark = asset.get('RestrictedToDenmark')
+                restricted_to_denmark = restricted_to_denmark or asset.get('RestrictedToDenmark')
                 asset_target = asset.get('Target')
                 for link in asset.get('Links', []):
                     uri = link.get('Uri')
@@ -278,10 +297,15 @@ class DRTVIE(InfoExtractor):
                 'Unfortunately, DR is not allowed to show this program outside Denmark.',
                 countries=self._GEO_COUNTRIES)
 
+        formats_hls = [x for x in formats if x['format_id'].startswith('HLS-')]
+        formats = [x for x in formats if x not in formats_hls]
+        self._check_formats(formats, video_id)
+        formats.extend(formats_hls)
         self._sort_formats(formats)
 
         return {
-            'id': video_id,
+            'id': display_id,
+            'display_id': video_id.rsplit(':', 1)[-1] or None if ':' in video_id else None,
             'title': title,
             'description': description,
             'thumbnail': thumbnail,
@@ -294,16 +318,20 @@ class DRTVIE(InfoExtractor):
             'season_number': int_or_none(data.get('SeasonNumber')),
             'season_id': str_or_none(data.get('SeasonUrn')),
             'episode': str_or_none(data.get('EpisodeTitle')),
+            'episode_id': video_id if video_id and video_id.startswith('urn:') else None,
             'episode_number': int_or_none(data.get('EpisodeNumber')),
             'release_year': int_or_none(data.get('ProductionYear')),
+            'age_limit': self._extract_age_limit(webpage),
         }
 
 
-class DRTVLiveIE(InfoExtractor):
+
+
+class DRTVLiveIE(DRTVIE):
     IE_NAME = 'drtv:live'
-    _VALID_URL = r'https?://(?:www\.)?dr\.dk/(?:tv|TV)/live/(?P<id>[\da-z-]+)'
-    _GEO_COUNTRIES = ['DK']
-    _TEST = {
+    IE_DESC = 'DRTV live channels'
+    _VALID_URL = r'https?://(?:www\.)?dr\.dk/(?:(?:tv|TV)/live|drtv/kanal)/(?P<id>[\da-z-]+)'
+    _TESTS = [{
         'url': 'https://www.dr.dk/tv/live/dr1',
         'info_dict': {
             'id': 'dr1',
@@ -314,16 +342,17 @@ class DRTVLiveIE(InfoExtractor):
             # m3u8 download
             'skip_download': True,
         },
-    }
+    }]
 
     def _real_extract(self, url):
         channel_id = self._match_id(url)
         channel_data = self._download_json(
-            'https://www.dr.dk/mu-online/api/1.0/channel/' + channel_id,
+            'https://www.dr.dk/mu-online/api/1.4/channel/' + channel_id,
             channel_id)
         title = self._live_title(channel_data['Title'])
 
         formats = []
+        forbidden = False
         for streaming_server in channel_data.get('StreamingServers', []):
             server = streaming_server.get('Server')
             if not server:
@@ -336,14 +365,33 @@ class DRTVLiveIE(InfoExtractor):
                         continue
                     stream_url = update_url_query(
                         '%s/%s' % (server, stream_path), {'b': ''})
-                    if link_type == 'HLS':
-                        formats.extend(self._extract_m3u8_formats(
-                            stream_url, channel_id, 'mp4',
-                            m3u8_id=link_type, fatal=False, live=True))
-                    elif link_type == 'HDS':
-                        formats.extend(self._extract_f4m_formats(update_url_query(
-                            '%s/%s' % (server, stream_path), {'hdcore': '3.7.0'}),
-                            channel_id, f4m_id=link_type, fatal=False))
+                    try:
+                        if link_type == 'HLS':
+                            formats.extend(self._extract_m3u8_formats(
+                                stream_url, channel_id, 'mp4',
+                                m3u8_id=link_type, live=True))
+                        elif link_type in ('DASH', 'DASH_B'):
+                            formats.extend(self._extract_mpd_formats(
+                                stream_url, channel_id,
+                                mpd_id=link_type))
+                        """ These give 400 or "no host" nowadays
+                        elif link_type == 'HDS':
+                            formats.extend(self._extract_f4m_formats(update_url_query(
+                                '%s/%s' % (server, stream_path), {'hdcore': '3.7.0'}),
+                                channel_id, f4m_id=link_type))
+                        """
+                    except ExtractorError as e:
+                        if e.cause and getattr(e.cause, 'code', None) == 403:
+                            forbidden = True
+                        else:
+                            errmsg = 'Unable to download %s: %s' % (link_type, error_to_compat_str(e))
+                            self._downloader.report_warning(errmsg)
+
+        if forbidden and len(formats) == 0:
+            self.raise_geo_restricted(
+                '''All streams returned 403 Forbidden: the channel's content may be geo-restricted.''',
+                countries=self._GEO_COUNTRIES)
+
         self._sort_formats(formats)
 
         return {
