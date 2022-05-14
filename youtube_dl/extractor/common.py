@@ -2561,7 +2561,8 @@ class InfoExtractor(object):
                         ]
                         width = int_or_none(s_attr.get('width'))
                         height = (int_or_none(s_attr.get('height'))
-                                  or int_or_none(s_attr.get('res')))
+                                  or int_or_none(s_attr.get('res'))
+                                  or int_or_none(s_attr.get('size')))
                         if not width or not height:
                             for lbl in labels:
                                 resolution = parse_resolution(lbl)
