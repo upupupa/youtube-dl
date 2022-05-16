@@ -325,6 +325,86 @@ class DRTVIE(InfoExtractor):
         }
 
 
+class DRTVSeriesIE(DRTVIE):
+    _VALID_URL = r'''(?x)
+                    https?://
+                        (?:www\.)?dr\.dk/drtv/(?:saeson|serie|liste)/
+                        (?P<id>[\da-z_-]+)
+                    '''
+    IE_NAME = 'drtv:series'
+    IE_DESC = 'DRTV series and seasons'
+    _TESTS = [{
+        'url': 'https://www.dr.dk/drtv/saeson/frank-and-kastaniegaarden_248731',
+        'info_dict': {
+            'id': 'frank-and-kastaniegaarden_248731',
+            'title': 'Frank & Kastaniegaarden (2021)',
+            'description': 'I Frank og Kastaniegarden (tidligere Bonderøven) viser Frank Erichsen vejen til et liv med fokus på bæredygtighed og selvforsyning. Udgangspunktet er familielivet på Kastaniegaarden, hvor han finder på nye idéer med inspiration fra nær og fjern.',
+        },
+        'playlist_count': 21,
+    }, {
+        'url': 'https://www.dr.dk/drtv/serie/matador_130149',
+        'info_dict': {
+            'id': 'matador_130149',
+            'title': 'Matador (1)',
+            'description': 'Klassikeren over alle danske dramaklassikere.',
+        },
+        'playlist_count': 24,
+    }, {
+        'url': 'https://www.dr.dk/drtv/liste/matador_-1-_-24_279134',
+        'info_dict': {
+            'id': 'matador_-1-_-24_279134',
+            'title': 'Matador: 1 - 24',
+        },
+        'playlist_count': 24,
+    },
+    ]
+
+    def _real_extract(self, url):
+        pl_id = self._match_id(url)
+
+        slug = pl_id.split('_')[0]
+
+        webpage = self._download_webpage(url, pl_id)
+
+        season = self._search_json_ld(webpage, pl_id, expected_type='TVSeason', default={})
+        title = strip_or_none(season.get('name'))
+        series_num = int_or_none(season.get('seasonNumber'))
+        description = season.get('description')
+
+        page_data = self._extract_page_json(webpage, pl_id)
+        page_data = page_data.get(url.split('/drtv', 1)[-1])
+        episode_data = try_get(page_data, lambda x: x['item']['episodes']['items'], list)
+
+        episodes = [y.get('path') for y in episode_data or [] if isinstance(y, dict) and y.get('path')]
+        episodes = (
+            map(lambda x: urljoin(url, '/drtv' + x), episodes)
+            if episodes else
+            map(lambda m: urljoin(url, m.group('href')),
+                re.finditer(
+                    r'''\bhref\s*=\s*(?P<q>'|")(?P<href>(?:https?://(?:www\.)?dr\.dk)?/drtv/episode/%s_[\da-z_-]+)(?P=q)''' % (re.escape(slug), ),
+                    webpage)))
+        title = strip_or_none(season.get('name'))
+        series_num = int_or_none(season.get('seasonNumber'))
+        description = season.get('description')
+        if episode_data:
+            title = title or strip_or_none(page_data['item'].get('title'))
+            if series_num is None:
+                series_num = int_or_none(page_data['item'].get('seasonNumber'))
+            description = description or season.get('description')
+        if title and series_num is not None:
+            title = '%s (%d)' % (title, series_num)
+        elif not title:
+            title = (
+                self._html_search_regex(r'(?s)<title\b[^>]*>\s*(.*?)\s*[|<]', webpage, 'title', default=None)
+                or re.split(r'DRTV\s+-\s*', self._og_search_title(webpage, default=''), 1)[-1]
+                or None)
+        info = self.playlist_from_matches(
+            episodes, playlist_id=pl_id, playlist_title=title, ie='DRTV')
+        info.update({
+            'description': description or self._html_search_meta('description', webpage, default=None),
+            'age_limit': self._extract_age_limit(webpage),
+        })
+        return info
 
 
 class DRTVLiveIE(DRTVIE):
