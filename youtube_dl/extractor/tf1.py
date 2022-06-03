@@ -54,10 +54,10 @@ class WatIE(InfoExtractor):
     ]
     _GEO_BYPASS = False
 
-    def _call_api(self, program_id, video_id=None):
+    def _call_api(self, program_id, video_id=None, pver=None):
         return self._download_json(
             'https://mediainfo.tf1.fr/mediainfocombo/' + program_id,
-            video_id or program_id, query={'context': 'MYTF1', 'pver': '4001000'})
+            video_id or program_id, query={'context': 'MYTF1', 'pver': pver if pver is not None else '4022002'})
 
     def _extract_video_info(self, video_data, video_id):
 
@@ -246,7 +246,16 @@ class TF1IE(WatIE):
             'display_id': slug,
         })
 
-        video_data = self._call_api(program_id, slug)
+        # pass the player version for the page if found: https://github.com/yt-dlp/yt-dlp/pull/3739#issuecomment-1145476244
+        pver = self._search_regex(
+            r'''["']player["']\s*:\s*\{[^}]*?["']version["']\s*:\s*["'](\d[\d.]*)["']''',
+            webpage, 'player version', fatal=False)
+        if pver:
+            pver = list(map(int, pver.split('.'))) + 2 * [0]
+            # who knows what will happen at pver[0] >= 10?
+            pver = '%d%.3d%.3d' % tuple(pver[:3])
+
+        video_data = self._call_api(program_id, slug, pver=pver)
 
         result = self._extract_video_info(video_data, slug)
         self._sort_formats(result['formats'])
