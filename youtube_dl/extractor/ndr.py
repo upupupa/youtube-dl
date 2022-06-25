@@ -1,20 +1,30 @@
 # coding: utf-8
 from __future__ import unicode_literals
 
+import itertools
 import re
 
 from .common import InfoExtractor
-from ..compat import compat_urllib_parse_urlparse
+from ..compat import (
+    compat_str,
+    compat_urllib_parse_urlparse,
+)
 from ..utils import (
     determine_ext,
     ExtractorError,
     int_or_none,
     merge_dicts,
+    parse_duration,
     parse_iso8601,
     qualities,
+    strip_or_none,
     try_get,
     urljoin,
+    url_or_none,
 )
+
+# for variable strdates (YYYYMMDD): let's set up a Year 3000 bug!
+_UPLOAD_DATE_RE = r'[12]\d{3}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])'
 
 
 class NDRBaseIE(InfoExtractor):
@@ -78,7 +88,7 @@ class NDRIE(NDRBaseIE):
             'title': 'La Valette entgeht der Hinrichtung',
             'description': 'md5:22f9541913a40fe50091d5cdd7c9f536',
             'uploader': 'ndrinfo',
-            'timestamp': 1631711863,
+            'timestamp': 1631704663,
             'upload_date': '20210915',
             'duration': 884,
         },
@@ -114,7 +124,44 @@ class NDRIE(NDRBaseIE):
         'only_matching': True,
     }]
 
+    def _extract_from_podcast_url(self, podcast_url, audio_id):
+        podcast_json = self._download_json(podcast_url, audio_id, fatal=False)
+        if not podcast_json:
+            return
+        title = strip_or_none(
+            try_get(podcast_json,
+                    (lambda x: x['audio']['title'],
+                     lambda x: x['title']), compat_str))
+        if not title:
+            return
+        formats = []
+        for file_data in itertools.chain(
+                try_get(podcast_json, lambda x: x['files'], list) or [],
+                try_get(podcast_json, lambda x: x['audio'], list) or []):
+            url = url_or_none(try_get(file_data, lambda x: x['url']))
+            if not url:
+                continue
+            formats.append({
+                'url': url,
+                # ignore "size": "0"
+                'filesize': int_or_none(file_data.get('size')) or None,
+            })
+        if not formats:
+            return
+        # we have something worth returning
+        self._sort_formats(formats)
+        return {
+            'id': audio_id,
+            'title': title,
+            'formats': formats,
+            'description': strip_or_none(podcast_json.get('summary')),
+            'duration': parse_duration(podcast_json.get('duration')),
+            'thumbnail': urljoin(podcast_url, podcast_json.get('poster')),
+            'timestamp': parse_iso8601(podcast_json.get('publicationDate')),
+        }
+
     def _extract_embed(self, webpage, display_id, url):
+        podcast = {}
         embed_url = (
             self._html_search_meta(
                 'embedURL', webpage, 'embed URL',
@@ -130,13 +177,21 @@ class NDRIE(NDRBaseIE):
             # get the initial part of the url path,. eg /panorama/archiv/2022/
             parsed_url = compat_urllib_parse_urlparse(url)
             path = self._search_regex(r'(.+/)%s' % display_id, parsed_url.path or '', 'embed URL', default='')
-            # find tell-tale image with the actual ID
+            # find tell-tale image (maybe) with the actual ID
             ndr_id = self._search_regex(r'%s([a-z]+\d+)(?!\.)\b' % (path, ), webpage, 'embed URL', default=None)
-            # or try to use special knowledge!
-            NDR_INFO_URL_TPL = 'https://www.ndr.de/info/%s-player.html'
-            embed_url = 'ndr:%s' % (ndr_id, ) if ndr_id else NDR_INFO_URL_TPL % (embed_url, )
-        if not embed_url:
-            raise ExtractorError('Unable to extract embedUrl')
+            if not ndr_id:
+                podcast_url = self._search_regex(
+                    r'''\bvar\s+apiUrl\s*=\s*['"]((?:/[\w-]+)+\.json)''',
+                    webpage, 'audio podcast JSON', default=None)
+                podcast_url = urljoin(url, podcast_url)
+                if podcast_url:
+                    podcast.update(self._extract_from_podcast_url(podcast_url, embed_url) or {})
+            if not podcast:
+                # use ndr_id or special, but probably now outdated, knowledge
+                NDR_INFO_URL_TPL = 'https://www.ndr.de/info/%s-player.html'
+                embed_url = 'ndr:%s' % (ndr_id, ) if ndr_id else NDR_INFO_URL_TPL % (embed_url, )
+        if not (embed_url or podcast):
+            raise ExtractorError('Unable to extract media')
 
         description = self._search_regex(
             r'<p[^>]+itemprop="description">([^<]+)</p>',
@@ -146,14 +201,18 @@ class NDRIE(NDRBaseIE):
                 (r'<span[^>]+itemprop="(?:datePublished|uploadDate)"[^>]+content="(?P<cont>[^"]+)"',
                  r'\bvar\s*pdt\s*=\s*(?P<q>["\'])(?P<cont>(?:(?!(?P=q)).)+)(?P=q)', ),
                 webpage, 'upload date', group='cont', default=None))
+        uploader = self._search_regex(r'''\bvar\s+bra\s*=\s*['"]([\w-]+)''', webpage, 'uploader', default=None)
         info = self._search_json_ld(webpage, display_id, default={})
-        return merge_dicts({
-            '_type': 'url_transparent',
-            'url': embed_url,
-            'display_id': display_id,
-            'description': description,
-            'timestamp': timestamp,
-        }, info)
+        return merge_dicts(
+            podcast or {
+                '_type': 'url_transparent',
+                'url': embed_url,
+            }, {
+                'display_id': display_id,
+                'description': description,
+                'timestamp': timestamp,
+                'uploader': uploader,
+            }, info)
 
 
 class NJoyIE(NDRBaseIE):
@@ -189,7 +248,7 @@ class NJoyIE(NDRBaseIE):
             'title': 'Das frueheste DJ Set des Nordens live mit Felix Jaehn',
             'description': 'md5:681698f527b8601e511e7b79edde7d2c',
             'uploader': 'njoy',
-            'upload_date': '20210830',
+            'upload_date': 're:' + _UPLOAD_DATE_RE,
         },
         'params': {
             'skip_download': True,
@@ -391,7 +450,7 @@ class NDREmbedIE(NDREmbedBaseIE):
             'ext': 'mp4',
             'title': r're:^NDR Fernsehen Niedersachsen \d{4}-\d{2}-\d{2} \d{2}:\d{2}$',
             'is_live': True,
-            'upload_date': '20210409',
+            'upload_date': 're:' + _UPLOAD_DATE_RE,
             'uploader': 'ndrtv',
         },
         'params': {
