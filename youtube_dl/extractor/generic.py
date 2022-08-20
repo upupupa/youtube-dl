@@ -2219,7 +2219,7 @@ class GenericIE(InfoExtractor):
             'url': 'https://www.bio.org/podcast',
             'info_dict': {
                 'id': 'podcast',
-                'title': 'I AM BIO Podcast | BIO',
+                'title': 'I am BIO Podcast | BIO',
             },
             'playlist_mincount': 52,
         },
@@ -2227,6 +2227,23 @@ class GenericIE(InfoExtractor):
             # Sibnet embed (https://help.sibnet.ru/?sibnet_video_embed)
             'url': 'https://phpbb3.x-tk.ru/bbcode-video-sibnet-t24.html',
             'only_matching': True,
+        },
+        {
+            # Pornhub clips with AGE_MARKERS detection
+            'url': 'https://www.pornhub.com/gif/38435321',
+            'info_dict': {
+                'id': '38435321',
+                'ext': 'webm',
+                'title': 'leolulu intro 1',
+                'description': 'Check out leolulu intro 1 porn gif with Leolulu, Threesome from video We were just trying to shoot a morning sex scene in the kitchen... Amateur Couple LeoLulu on Pornhub.com',
+                'timestamp': 1637539200,
+                'upload_date': '20211122',
+                'thumbnail': r're:https?://\w+\.phncdn\.com/gif/38435321\.gif',
+                'age_limit': 18,
+            },
+            'params': {
+                'skip_download': True,
+            },
         },
     ]
 
@@ -2538,9 +2555,11 @@ class GenericIE(InfoExtractor):
         age_limit = self._rta_search(webpage)
         # And then there are the jokers who advertise that they use RTA,
         # but actually don't.
-        AGE_LIMIT_MARKERS = [
-            r'Proudly Labeled <a href="http://www\.rtalabel\.org/" title="Restricted to Adults">RTA</a>',
-        ]
+        AGE_LIMIT_MARKERS = (
+            r'<a\b[^>]+\bhref\s*=\s*"http://www\.rtalabel\.org/"[^>]+?(?:\btitle\s*=\s*"Restricted to Adults\b|>\s*RTA\b)',
+            r'''<img\b[^>]+\b(?:id\s*=["']RTAImage|alt\s*=\s*["']RTA)\b''',
+            r'(?:>\s*(?:(?:18\s+)?(?:U.S.C.|USC)\s+)?§?|/)2257\b',
+        )
         if any(re.search(marker, webpage) for marker in AGE_LIMIT_MARKERS):
             age_limit = 18
 
