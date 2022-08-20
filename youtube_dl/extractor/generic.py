@@ -2266,6 +2266,13 @@ class GenericIE(InfoExtractor):
         },
     ]
 
+    @classmethod
+    def generic_url_result(cls, url, video_id=None, video_title=None, force_videoid=False):
+        contraband = {'to_generic': True}
+        if video_id and force_videoid:
+            contraband['force_videoid'] = video_id
+        return cls.url_result(smuggle_url(url, contraband), cls.ie_key(), video_id, video_title)
+
     def report_following_redirect(self, new_url):
         """Report information extraction."""
         self._downloader.to_screen('[redirect] Following redirect to %s' % new_url)
@@ -2404,11 +2411,9 @@ class GenericIE(InfoExtractor):
                 return self.url_result(default_search + url)
 
         url, smuggled_data = unsmuggle_url(url)
-        force_videoid = None
-        is_intentional = smuggled_data and smuggled_data.get('to_generic')
-        if smuggled_data and 'force_videoid' in smuggled_data:
-            force_videoid = smuggled_data['force_videoid']
-            video_id = force_videoid
+        is_intentional, force_videoid = (smuggled_data or {}).get('to_generic', False), None
+        if is_intentional and 'force_videoid' in smuggled_data:
+            video_id = force_videoid = smuggled_data['force_videoid']
         else:
             video_id = self._generic_id(url)
 
@@ -2440,7 +2445,9 @@ class GenericIE(InfoExtractor):
         info_dict = {
             'id': video_id,
             'title': self._generic_title(url),
-            'timestamp': unified_timestamp(head_response.headers.get('Last-Modified'))
+            'timestamp': unified_timestamp(head_response.headers.get('Last-Modified')),
+            # ensure unsmuggled URL
+            'webpage_url': url,
         }
 
         # Check for direct link to a video
@@ -3367,8 +3374,8 @@ class GenericIE(InfoExtractor):
             if len(entries) == 1:
                 e_id = entries[0].get('id')
                 entries[0] = merge_dicts(entries[0], info_dict)
-                entries[0].setdefault('display_id', info_dict['id'])
-                if not e_id:
+                if not e_id and not force_videoid:
+                    entries[0].setdefault('display_id', info_dict['id'])
                     entries[0]['id'] = self._generic_id(get_fmt_url(entries[0]))
             else:
                 for num, entry in enumerate(entries, start=1):
@@ -3378,7 +3385,7 @@ class GenericIE(InfoExtractor):
                         }, info_dict)
             for entry in entries:
                 self._sort_formats(entry['formats'])
-            return self.playlist_result(entries, video_id, video_title)
+            return self.playlist_result(entries, video_id, video_title) if len(entries) != 1 else entries[0]
 
         jwplayer_data = self._find_jwplayer_data(
             webpage, video_id, transform_source=js_to_json)
@@ -3389,7 +3396,8 @@ class GenericIE(InfoExtractor):
                 jwp_id = info.get('id')
                 if jwp_id == info_dict['id']:
                     info.setdefault('display_id', jwp_id)
-                    info['id'] = self._generic_id(get_fmt_url(info))
+                    if not force_videoid:
+                        info['id'] = self._generic_id(get_fmt_url(info))
                 return merge_dicts(info, info_dict)
             except ExtractorError:
                 # See https://github.com/ytdl-org/youtube-dl/pull/16735
@@ -3528,7 +3536,7 @@ class GenericIE(InfoExtractor):
 
         if not found:
             # twitter:player is a https URL to iframe player that may or may not
-            # be supported by youtube-dl thus this is checked the very last (see
+            # be supported by youtube-dl; thus this is checked the very last (see
             # https://dev.twitter.com/cards/types/player#On_twitter.com_via_desktop_browser)
             embed_url = self._html_search_meta('twitter:player', webpage, default=None)
             if embed_url and embed_url != url:
