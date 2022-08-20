@@ -676,7 +676,7 @@ class PornHubPagedPlaylistBaseIE(PornHubPlaylistBaseIE):
 
 
 class PornHubPagedVideoListIE(PornHubPagedPlaylistBaseIE):
-    _VALID_URL = r'https?://(?:[^/]+\.)?%s/(?!playlist/)(?P<id>(?:[^/]+/)*[^/?#&]+)' % PornHubBaseIE._PORNHUB_HOST_RE
+    _VALID_URL = r'https?://(?:[^/]+\.)?%s/(?!playlist/|gif/)(?P<id>(?:[^/]+/)*[^/?#&]+)' % PornHubBaseIE._PORNHUB_HOST_RE
     _TESTS = [{
         'url': 'https://www.pornhub.com/model/zoe_ph/videos',
         'only_matching': True,
