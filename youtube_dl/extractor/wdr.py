@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 import re
 
 from .common import InfoExtractor
+from .generic import GenericIE
 from ..compat import (
     compat_str,
     compat_urlparse,
@@ -129,7 +130,7 @@ class WDRIE(InfoExtractor):
 class WDRPageIE(WDRIE):
     _MAUS_REGEX = r'https?://(?:www\.)wdrmaus.de/(?:[^/]+/)*?(?P<maus_id>[^/?#.]+)(?:/?|/index\.php5|\.php5)$'
     _PAGE_REGEX = r'/(?:mediathek/)?(?:[^/]+/)*(?P<display_id>[^/]+)\.html'
-    _VALID_URL = r'https?://(?:www\d?\.)?(?:(?:kinder\.)?wdr\d?|sportschau)\.de' + _PAGE_REGEX + '|' + _MAUS_REGEX
+    _VALID_URL = r'https?://(?:www\d?\.)?(?:(?:kinder\.)?wdr\d?|(?P<sportschau>sportschau))\.de' + _PAGE_REGEX + '|' + _MAUS_REGEX
 
     _TESTS = [
         {
@@ -224,20 +225,26 @@ class WDRPageIE(WDRIE):
         },
         {
             'url': 'http://www.sportschau.de/handballem2018/handball-nationalmannschaft-em-stolperstein-vorrunde-100.html',
-            'info_dict': {
-                'id': 'mdb-1556012',
-                'ext': 'mp4',
-                'title': 'DHB-Vizepräsident Bob Hanning - "Die Weltspitze ist extrem breit"',
-                'upload_date': '20180111',
-            },
-            'params': {
-                'skip_download': True,
-            },
-            'skip': 'HTTP Error 404: Not Found',
+            'only_matching': True,
         },
         {
             'url': 'http://www.sportschau.de/handballem2018/audio-vorschau---die-handball-em-startet-mit-grossem-favoritenfeld-100.html',
             'only_matching': True,
+        },
+        {
+            'url': 'https://www.sportschau.de/schach/video-spasski-gegen-fischer-das-schachspiel-des-jahrhunderts-100.html',
+            'md5': 'f8a3cb4c2d94953212dcf7e157de7b9c',
+            'info_dict': {
+                'id': 'video-spasski-gegen-fischer-das-schachspiel-des-jahrhunderts-100',
+                'ext': 'mp4',
+                'title': 'Spasski gegen Fischer - das Schachspiel des Jahrhunderts',
+                'timestamp': 1657527209,
+                'upload_date': '20220711',
+                'duration': 572,
+                'thumbnail': r're:https?://images\.sportschau\.de(?:/[\w-]+)+\.jpg',
+                'description': 'md5:ed4bb849953814e0e07e11d7c1b61ede',
+                'uploader': 'Sportschau.de',
+            },
         },
         {
             'url': 'https://kinder.wdr.de/tv/die-sendung-mit-dem-elefanten/av/video-folge---astronaut-100.html',
@@ -246,8 +253,10 @@ class WDRPageIE(WDRIE):
     ]
 
     def _real_extract(self, url):
-        mobj = re.match(self._VALID_URL, url)
-        display_id = dict_get(mobj.groupdict(), ('display_id', 'maus_id'), 'wdrmaus')
+        md = re.match(self._VALID_URL, url).groupdict()
+        if md.get('sportschau'):
+            return GenericIE.generic_url_result(url)
+        display_id = dict_get(md, ('display_id', 'maus_id'), 'wdrmaus')
         webpage = self._download_webpage(url, display_id)
 
         entries = []
