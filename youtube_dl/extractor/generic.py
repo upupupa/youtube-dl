@@ -136,6 +136,10 @@ class GenericIE(InfoExtractor):
     IE_DESC = 'Generic downloader that works on some sites'
     _VALID_URL = r'.*'
     IE_NAME = 'generic'
+    # URL patterns expected to be handled here and not a "Fallback"
+    _EXPECTED_URL_RES = (
+        r'https?://(?:www\.)?handjobhub\.com/',
+    )
     _TESTS = [
         # Direct link to a video
         {
@@ -189,6 +193,7 @@ class GenericIE(InfoExtractor):
                 'ext': 'webm',
                 'title': '5_Lennart_Poettering_-_Systemd',
                 'upload_date': '20141120',
+                'timestamp': 1416498816,
             },
             'expected_warnings': [
                 'URL could be a direct video link, returning it as such.'
@@ -354,6 +359,7 @@ class GenericIE(InfoExtractor):
                 'ext': 'mp4',
                 'title': 'car-20120827-manifest',
                 'formats': 'mincount:9',
+                'timestamp': 1378272859,
                 'upload_date': '20130904',
             },
             'params': {
@@ -414,7 +420,7 @@ class GenericIE(InfoExtractor):
                 'id': 'pO8h3EaFRdo',
                 'ext': 'mp4',
                 'title': 'Tripeo Boiler Room x Dekmantel Festival DJ Set',
-                'description': 'md5:6294cc1af09c4049e0652b51a2df10d5',
+                'description': 'md5:2d713ccbb45b686a1888397b2c77ca6b',
                 'upload_date': '20150917',
                 'uploader_id': 'brtvofficial',
                 'uploader': 'Boiler Room',
@@ -430,7 +436,7 @@ class GenericIE(InfoExtractor):
                 'id': '13601338388002',
                 'ext': 'mp4',
                 'uploader': 'www.hodiho.fr',
-                'title': 'R\u00e9gis plante sa Jeep',
+                'title': r're:(?:.+\s)?R\u00e9gis plante sa Jeep',
             }
         },
         # bandcamp page with custom domain
@@ -461,6 +467,7 @@ class GenericIE(InfoExtractor):
             'params': {
                 'skip_download': True,
             },
+            'skip': '''404: page demandée n'existe pas ou n'est plus disponible.''',
         },
         {
             # embedded with itemprop embedURL and video id spelled as `idVideo`
@@ -479,6 +486,7 @@ class GenericIE(InfoExtractor):
             'params': {
                 'skip_download': True,
             },
+            'skip': 'Page no longer exists, redirects to default',
         },
         {
             # https://github.com/ytdl-org/youtube-dl/issues/2253
@@ -556,6 +564,7 @@ class GenericIE(InfoExtractor):
                     'uploader_id': '1964492299001',
                 },
             }],
+            'skip': 'Page no longer exists, redirects to default',
         },
         {
             # Brightcove with UUID in videoPlayer
@@ -588,6 +597,7 @@ class GenericIE(InfoExtractor):
                 'title': 'VIDEO:  St. Thomas More earns first trip to basketball semis',
 
             },
+            'skip': '404 (not found)',
         },
         {
             # Alternative brightcove <video> attributes
@@ -609,6 +619,8 @@ class GenericIE(InfoExtractor):
                 },
                 'only_matching': True,
             }],
+            'skip': '''404: Ooops ! Il semblerait qu'on ait perdu le signal''',
+
         },
         {
             # Brightcove with UUID in videoPlayer
@@ -626,6 +638,7 @@ class GenericIE(InfoExtractor):
             'params': {
                 'skip_download': True,  # m3u8 download
             },
+            'skip': 'Content no longer on page',
         },
         # ooyala video
         {
@@ -637,6 +650,7 @@ class GenericIE(InfoExtractor):
                 'title': '2cc213299525360.mov',  # that's what we get
                 'duration': 238.231,
             },
+            'skip': '404: OOPS! Something went wrong here!',
             'add_ie': ['Ooyala'],
         },
         {
@@ -960,13 +974,15 @@ class GenericIE(InfoExtractor):
         # Flowplayer
         {
             'url': 'http://www.handjobhub.com/video/busty-blonde-siri-tit-fuck-while-wank-6313.html',
-            'md5': '9d65602bf31c6e20014319c7d07fba27',
+            'md5': '3b4944d663f409527e306179f7a64a3d',
             'info_dict': {
                 'id': '5123ea6d5e5a7',
                 'ext': 'mp4',
                 'age_limit': 18,
-                'uploader': 'www.handjobhub.com',
-                'title': 'Busty Blonde Siri Tit Fuck While Wank at HandjobHub.com',
+                'uploader': r're:(?:www\.)?handjobhub\.com',
+                'title': r're:Busty Blonde Siri Tit Fuck While Wank(?: at HandjobHub\.com)?',
+                'description': 'md5:450f6eb849503ab1c5b1056d586a7008',
+
             }
         },
         # Multiple brightcove videos
@@ -2135,6 +2151,7 @@ class GenericIE(InfoExtractor):
                 'title': 'Доставщик пиццы спросил разрешения сыграть на фортепиано',
                 'description': 'md5:89209cdc587dab1e4a090453dbaa2cb1',
                 'thumbnail': r're:^https?://.*\.jpg$',
+                'uploader': 'video.sibnet.ru',
             },
             'params': {
                 'skip_download': True,
@@ -2157,6 +2174,7 @@ class GenericIE(InfoExtractor):
             'params': {
                 'skip_download': True,
             },
+            'skip': 'Video geo-restricted by the owner.',
         },
         # {
         #     # TODO: find another test
@@ -2240,6 +2258,7 @@ class GenericIE(InfoExtractor):
                 'upload_date': '20211122',
                 'thumbnail': r're:https?://\w+\.phncdn\.com/gif/38435321\.gif',
                 'age_limit': 18,
+                'uploader': 'www.pornhub.com',
             },
             'params': {
                 'skip_download': True,
@@ -2446,8 +2465,9 @@ class GenericIE(InfoExtractor):
 
         if not self._downloader.params.get('test', False) and not is_intentional:
             force = self._downloader.params.get('force_generic_extractor', False)
-            self._downloader.report_warning(
-                '%s on generic information extractor.' % ('Forcing' if force else 'Falling back'))
+            if force or not any(re.match(expected, url) for expected in self._EXPECTED_URL_RES):
+                self._downloader.report_warning(
+                    '%s on generic information extractor.' % ('Forcing' if force else 'Falling back'))
 
         if not full_response:
             request = sanitized_Request(url)
@@ -2558,23 +2578,25 @@ class GenericIE(InfoExtractor):
         AGE_LIMIT_MARKERS = (
             r'<a\b[^>]+\bhref\s*=\s*"http://www\.rtalabel\.org/"[^>]+?(?:\btitle\s*=\s*"Restricted to Adults\b|>\s*RTA\b)',
             r'''<img\b[^>]+\b(?:id\s*=["']RTAImage|alt\s*=\s*["']RTA)\b''',
-            r'(?:>\s*(?:(?:18\s+)?(?:U.S.C.|USC)\s+)?§?|/)2257\b',
+            r'''(?:(?:>|=\s*['"]?)\s*(?:(?:18\s+)?(?:U.S.C.|USC)\s+)?§?|/)2257\b''',
         )
         if any(re.search(marker, webpage) for marker in AGE_LIMIT_MARKERS):
             age_limit = 18
 
         # video uploader is domain name
-        video_uploader = self._search_regex(
-            r'^(?:https?://)?([^/]*)/.*', url, 'video uploader')
+        video_uploader = compat_urlparse.urlparse(url).hostname
 
         video_description = self._og_search_description(webpage, default=None)
         video_thumbnail = self._og_search_thumbnail(webpage, default=None)
+        video_creator = self._html_search_meta(('og:author', 'author', 'twitter:creator'), webpage, default=None)
 
         info_dict.update({
             'title': video_title,
             'description': video_description,
             'thumbnail': video_thumbnail,
             'age_limit': age_limit,
+            'uploader': video_uploader,
+            'creator': video_creator,
         })
 
         # Look for Brightcove Legacy Studio embeds
@@ -3336,20 +3358,24 @@ class GenericIE(InfoExtractor):
             return self.playlist_from_matches(
                 zype_urls, video_id, video_title, ie=ZypeIE.ie_key())
 
+        def get_fmt_url(x):
+            return x.get('url') or x['formats'][0]['url']
+
         # Look for HTML5 media
         entries = self._parse_html5_media_entries(url, webpage, video_id, m3u8_id='hls')
         if entries:
             if len(entries) == 1:
-                entries[0].update({
-                    'id': video_id,
-                    'title': video_title,
-                })
+                e_id = entries[0].get('id')
+                entries[0] = merge_dicts(entries[0], info_dict)
+                entries[0].setdefault('display_id', info_dict['id'])
+                if not e_id:
+                    entries[0]['id'] = self._generic_id(get_fmt_url(entries[0]))
             else:
                 for num, entry in enumerate(entries, start=1):
-                    entry.update({
-                        'id': '%s-%s' % (video_id, num),
+                    entry = merge_dicts(entry, {
+                        'id': '%s-%d' % (video_id, num),
                         'title': '%s (%d)' % (video_title, num),
-                    })
+                        }, info_dict)
             for entry in entries:
                 self._sort_formats(entry['formats'])
             return self.playlist_result(entries, video_id, video_title)
@@ -3360,6 +3386,10 @@ class GenericIE(InfoExtractor):
             try:
                 info = self._parse_jwplayer_data(
                     jwplayer_data, video_id, require_title=False, base_url=url)
+                jwp_id = info.get('id')
+                if jwp_id == info_dict['id']:
+                    info.setdefault('display_id', jwp_id)
+                    info['id'] = self._generic_id(get_fmt_url(info))
                 return merge_dicts(info, info_dict)
             except ExtractorError:
                 # See https://github.com/ytdl-org/youtube-dl/pull/16735
