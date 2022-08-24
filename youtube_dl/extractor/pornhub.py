@@ -35,7 +35,7 @@ from ..utils import (
 
 class PornHubBaseIE(InfoExtractor):
     _NETRC_MACHINE = 'pornhub'
-    _PORNHUB_HOST_RE = r'(?:(?P<host>pornhub(?:premium)?\.(?:com|net|org))|pornhubvybmsymdol4iibwgwtkpwmeyd6luq2gxajgjzfjvotyt5zhyd\.onion)'
+    _PORNHUB_HOST_RE = r'(?:(?P<host>(?:pornhub(?:premium)?|(?P<MH>modelhub))\.(?:com|net|org))|pornhubvybmsymdol4iibwgwtkpwmeyd6luq2gxajgjzfjvotyt5zhyd\.onion)'
 
     def _download_webpage_handle(self, *args, **kwargs):
         def dl(*args, **kwargs):
@@ -52,10 +52,7 @@ class PornHubBaseIE(InfoExtractor):
                 r'<body\b[^>]+\bonload=["\']go\(\)',
                 r'document\.cookie\s*=\s*["\']RNKEY=',
                 r'document\.location\.reload\(true\)')):
-            url_or_request = args[0]
-            url = (url_or_request.get_full_url()
-                   if isinstance(url_or_request, compat_urllib_request.Request)
-                   else url_or_request)
+            url = urlh.geturl()
             phantom = PhantomJSwrapper(self, required_version='2.0')
             phantom.get(url, html=webpage)
             webpage, urlh = dl(*args, **kwargs)
@@ -70,6 +67,8 @@ class PornHubBaseIE(InfoExtractor):
             return
 
         site = host.split('.')[0]
+        if 'premium' not in site:
+            site = site.replace('model', 'porn')
 
         # Both sites pornhub and pornhubpremium have separate accounts
         # so there should be an option to provide credentials for both.
@@ -130,7 +129,7 @@ class PornHubIE(PornHubBaseIE):
                         (?:
                             (?:[^/]+\.)?
                             %s
-                            /(?:(?:view_video\.php|video/show)\?viewkey=|embed/)|
+                            /(?(MH)video/|(?:(?:view_video\.php|video/show)\?viewkey=|embed/))|
                             (?:www\.)?thumbzilla\.com/video/
                         )
                         (?P<id>[\da-z]+)
@@ -222,6 +221,16 @@ class PornHubIE(PornHubBaseIE):
             'thumbnail': r're:https?://.+',
         },
     }, {
+        'url': 'https://www.modelhub.com/video/ph5ad0c423d10e7',
+        'md5': '92eeeb71d72de8fabd1be625f01c9150',
+        'info_dict': {
+            'id': 'ph5ad0c423d10e7',
+            'ext': 'mp4',
+            'age_limit': 18,
+            'uploader': 'www.modelhub.com',
+            'title': 'ATM I LOVE ANAL AND ATM HUGE ASS ANAL | Modelhub.com',
+        },
+    }, {
         'url': 'http://www.pornhub.com/view_video.php?viewkey=ph557bbb6676d2d',
         'only_matching': True,
     }, {
@@ -282,9 +291,16 @@ class PornHubIE(PornHubBaseIE):
         return str_to_int(self._search_regex(pattern, webpage, '%s count' % (name, ), default=None))
 
     def _real_extract(self, url):
-        mobj = re.match(self._VALID_URL, url)
+        for _ in range(2):
+            mobj = re.match(self._VALID_URL, url)
+            video_id = mobj.group('id')
+            _, urlh = self._download_webpage_handle(url, video_id)
+            if url == urlh.geturl():
+                break
+            url == urlh.geturl()
+
         host = mobj.group('host') or 'pornhub.com'
-        video_id = mobj.group('id')
+        is_modelhub = mobj.group('MH') is not None
 
         self._login(host)
 
@@ -293,7 +309,7 @@ class PornHubIE(PornHubBaseIE):
         def dl_webpage(platform):
             self._set_cookie(host, 'platform', platform)
             return self._download_webpage(
-                'https://www.%s/view_video.php?viewkey=%s' % (host, video_id),
+                url if is_modelhub else 'https://www.%s/view_video.php?viewkey=%s' % (host, video_id),
                 video_id, 'Downloading %s webpage' % platform)
 
         webpage = dl_webpage('pc')
@@ -352,7 +368,7 @@ class PornHubIE(PornHubBaseIE):
                         self.report_warning('%s: %s' % (msg, error_to_compat_str(e)), video_id=video_id)
             return {} if no_default else default
 
-        flashvars = search_json(r'var\s+flashvars_\d+\s*=', webpage, 'flashvars', video_id)
+        flashvars = search_json(r'var\s+flashvars_\d+\s*=', webpage, 'flashvars', video_id, default=None if is_modelhub else NO_DEFAULT)
         media_definitions = try_get(flashvars, lambda x: x['mediaDefinitions'], list)
         if media_definitions:
             subtitle_url = url_or_none(flashvars.get('closedCaptionsFile'))
@@ -456,6 +472,13 @@ class PornHubIE(PornHubBaseIE):
                 'format_id': '%dp' % height if height else None,
                 'height': height,
             })
+
+        if not video_urls:
+            # import here to avoid mutually recursive dependency
+            from .generic import GenericIE
+            ret = GenericIE.generic_url_result(url, video_id=video_id, video_title=title, force_videoid=True)
+            ret['_type'] = 'url_transparent'
+            return ret
 
         for video_url, height in video_urls:
             if not upload_date:
@@ -568,52 +591,6 @@ class PornHubPlaylistBaseIE(PornHubBaseIE):
         ]
 
 
-class PornHubUserIE(PornHubPlaylistBaseIE):
-    _VALID_URL = r'(?P<url>https?://(?:[^/]+\.)?%s/(?:(?:user|channel)s|model|pornstar)/(?P<id>[^/?#&]+))(?:[?#&]|/(?!videos)|$)' % PornHubBaseIE._PORNHUB_HOST_RE
-    _TESTS = [{
-        'url': 'https://www.pornhub.com/model/zoe_ph',
-        'playlist_mincount': 118,
-    }, {
-        'url': 'https://www.pornhub.com/pornstar/liz-vicious',
-        'info_dict': {
-            'id': 'liz-vicious',
-        },
-        'playlist_mincount': 118,
-    }, {
-        'url': 'https://www.pornhub.com/users/russianveet69',
-        'only_matching': True,
-    }, {
-        'url': 'https://www.pornhub.com/channels/povd',
-        'only_matching': True,
-    }, {
-        'url': 'https://www.pornhub.com/model/zoe_ph?abc=1',
-        'only_matching': True,
-    }, {
-        # Unavailable via /videos page, but available with direct pagination
-        # on pornstar page (see [1]), requires premium
-        # 1. https://github.com/ytdl-org/youtube-dl/issues/27853
-        'url': 'https://www.pornhubpremium.com/pornstar/sienna-west',
-        'only_matching': True,
-    }, {
-        # Same as before, multi page
-        'url': 'https://www.pornhubpremium.com/pornstar/lily-labeau',
-        'only_matching': True,
-    }, {
-        'url': 'https://pornhubvybmsymdol4iibwgwtkpwmeyd6luq2gxajgjzfjvotyt5zhyd.onion/model/zoe_ph',
-        'only_matching': True,
-    }]
-
-    def _real_extract(self, url):
-        mobj = re.match(self._VALID_URL, url)
-        user_id = mobj.group('id')
-        videos_url = '%s/videos' % mobj.group('url')
-        page = self._extract_page(url)
-        if page:
-            videos_url = update_url_query(videos_url, {'page': page})
-        return self.url_result(
-            videos_url, ie=PornHubPagedVideoListIE.ie_key(), video_id=user_id)
-
-
 class PornHubPagedPlaylistBaseIE(PornHubPlaylistBaseIE):
     @staticmethod
     def _has_more(webpage):
@@ -673,6 +650,59 @@ class PornHubPagedPlaylistBaseIE(PornHubPlaylistBaseIE):
         self._login(host)
 
         return self.playlist_result(self._entries(url, host, item_id), item_id)
+
+
+class PornHubUserIE(PornHubPagedPlaylistBaseIE):
+    _VALID_URL = r'(?P<url>https?://(?:[^/]+\.)?%s/(?P<id>(?:(?:user|channel)s|model|pornstar)/[^/?#&]+))(?:[?#&]|/(?!videos)|$)' % PornHubBaseIE._PORNHUB_HOST_RE
+    _TESTS = [{
+        'url': 'https://www.pornhub.com/model/zoe_ph',
+        'info_dict': {
+            'id': 'zoe_ph',
+        },
+        'playlist_mincount': 118,
+    }, {
+        'url': 'https://www.pornhub.com/pornstar/liz-vicious',
+        'info_dict': {
+            'id': 'liz-vicious',
+        },
+        'playlist_mincount': 118,
+    }, {
+        'url': 'https://www.pornhub.com/users/russianveet69',
+        'only_matching': True,
+    }, {
+        'url': 'https://www.pornhub.com/channels/povd',
+        'only_matching': True,
+    }, {
+        'url': 'https://www.pornhub.com/model/zoe_ph?abc=1',
+        'only_matching': True,
+    }, {
+        # Unavailable via /videos page, but available with direct pagination
+        # on pornstar page (see [1]), requires premium
+        # 1. https://github.com/ytdl-org/youtube-dl/issues/27853
+        'url': 'https://www.pornhubpremium.com/pornstar/sienna-west',
+        'only_matching': True,
+    }, {
+        # Same as before, multi page
+        'url': 'https://www.pornhubpremium.com/pornstar/lily-labeau',
+        'only_matching': True,
+    }, {
+        'url': 'https://pornhubvybmsymdol4iibwgwtkpwmeyd6luq2gxajgjzfjvotyt5zhyd.onion/model/zoe_ph',
+        'only_matching': True,
+    }]
+
+    def _real_extract(self, url):
+        mobj = re.match(self._VALID_URL, url)
+        user_id, host = mobj.group('id', 'host')
+        videos_url = '%s/videos' % mobj.group('url')
+        page = self._extract_page(url)
+        if page:
+            videos_url = update_url_query(videos_url, {'page': page})
+
+        self._login(host)
+
+        return self.playlist_result(self._entries(videos_url, host, user_id), user_id.split('/')[-1])
+        # return self.url_result(
+        #     videos_url, ie=PornHubPagedVideoListIE.ie_key(), video_id=user_id)
 
 
 class PornHubPagedVideoListIE(PornHubPagedPlaylistBaseIE):
