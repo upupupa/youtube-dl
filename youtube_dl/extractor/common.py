@@ -2599,6 +2599,8 @@ class InfoExtractor(object):
             for f in media_info['formats']:
                 f.setdefault('http_headers', {})['Referer'] = base_url
             if media_info['formats'] or media_info['subtitles']:
+                if media_info['formats']:
+                    self._sort_formats(media_info['formats'])
                 entries.append(media_info)
         return entries
 

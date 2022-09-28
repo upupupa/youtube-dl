@@ -3331,8 +3331,6 @@ class GenericIE(InfoExtractor):
                         'id': '%s-%s' % (video_id, num),
                         'title': '%s (%d)' % (video_title, num),
                     })
-            for entry in entries:
-                self._sort_formats(entry['formats'])
             return self.playlist_result(entries, video_id, video_title)
 
         jwplayer_data = self._find_jwplayer_data(

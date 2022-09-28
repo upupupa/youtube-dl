@@ -41,7 +41,7 @@ class CharlieRoseIE(InfoExtractor):
             self._PLAYER_BASE % video_id, webpage, video_id,
             m3u8_entry_protocol='m3u8_native')[0]
 
-        self._sort_formats(info_dict['formats'])
+        # probably not required
         self._remove_duplicate_formats(info_dict['formats'])
 
         info_dict.update({
