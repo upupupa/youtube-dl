@@ -6,7 +6,6 @@ import re
 
 from .common import InfoExtractor
 from ..utils import (
-    ExtractorError,
     orderedSet,
     unified_strdate,
     urlencode_postdata,
@@ -61,11 +60,10 @@ class BitChuteIE(InfoExtractor):
 
         if not formats:
             formats = self._parse_html5_media_entries(
-                url, webpage, video_id)[0]['formats']
+                url, webpage, video_id, sort_formats=False)[0]['formats']
 
         self._check_formats(formats, video_id)
-        if not formats:
-            raise ExtractorError('No valid media links found')
+        self._sort_formats(formats)
 
         description = self._html_search_regex(
             r'(?s)<div\b[^>]+\bclass=["\']full hidden[^>]+>(.+?)</div>',

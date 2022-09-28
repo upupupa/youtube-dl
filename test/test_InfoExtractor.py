@@ -225,23 +225,13 @@ class TestInfoExtractor(unittest.TestCase):
                 ''', None)[0],
             {
                 'formats': [{
-                    'url': 'https://video.csfd.cz/files/videos/157/750/157750813/163327358_eac647.mp4',
-                    'ext': 'mp4',
+                    'url': 'https://video.csfd.cz/files/videos/157/750/157750813/163327359_962b4a.webm',
+                    'ext': 'webm',
                     'width': 640,
                     'height': 360,
                 }, {
-                    'url': 'https://video.csfd.cz/files/videos/157/750/157750813/163327360_3d2646.mp4',
+                    'url': 'https://video.csfd.cz/files/videos/157/750/157750813/163327358_eac647.mp4',
                     'ext': 'mp4',
-                    'width': 1280,
-                    'height': 720,
-                }, {
-                    'url': 'https://video.csfd.cz/files/videos/157/750/157750813/163327356_91f258.mp4',
-                    'ext': 'mp4',
-                    'width': 1920,
-                    'height': 1080,
-                }, {
-                    'url': 'https://video.csfd.cz/files/videos/157/750/157750813/163327359_962b4a.webm',
-                    'ext': 'webm',
                     'width': 640,
                     'height': 360,
                 }, {
@@ -250,8 +240,18 @@ class TestInfoExtractor(unittest.TestCase):
                     'width': 1280,
                     'height': 720,
                 }, {
+                    'url': 'https://video.csfd.cz/files/videos/157/750/157750813/163327360_3d2646.mp4',
+                    'ext': 'mp4',
+                    'width': 1280,
+                    'height': 720,
+                }, {
                     'url': 'https://video.csfd.cz/files/videos/157/750/157750813/163327357_8ab472.webm',
                     'ext': 'webm',
+                    'width': 1920,
+                    'height': 1080,
+                }, {
+                    'url': 'https://video.csfd.cz/files/videos/157/750/157750813/163327356_91f258.mp4',
+                    'ext': 'mp4',
                     'width': 1920,
                     'height': 1080,
                 }],
@@ -275,7 +275,7 @@ class TestInfoExtractor(unittest.TestCase):
                                 <source src="https://s-v2.tamasha.com/statics/videos_file/20/00/Kkdjw_200041c66f657fc967db464d156eafbc1ed9fe6f_n_144.mp4" type="video/mp4"
                                         label="144p" res="144"/>
                 </video>
-                ''', None)[0],
+                ''', None, sort_formats=False)[0],
             {
                 'formats': [{
                     'url': 'https://s-v2.tamasha.com/statics/videos_file/19/8f/Kkdjw_198feff8577d0057536e905cce1fb61438dd64e0_n_240.mp4',

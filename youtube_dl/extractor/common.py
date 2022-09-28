@@ -2479,7 +2479,7 @@ class InfoExtractor(object):
                 })
         return formats
 
-    def _parse_html5_media_entries(self, base_url, webpage, video_id, m3u8_id=None, m3u8_entry_protocol='m3u8', mpd_id=None, preference=None):
+    def _parse_html5_media_entries(self, base_url, webpage, video_id, m3u8_id=None, m3u8_entry_protocol='m3u8', mpd_id=None, preference=None, sort_formats=True):
         def absolute_url(item_url):
             return urljoin(base_url, item_url)
 
@@ -2599,7 +2599,7 @@ class InfoExtractor(object):
             for f in media_info['formats']:
                 f.setdefault('http_headers', {})['Referer'] = base_url
             if media_info['formats'] or media_info['subtitles']:
-                if media_info['formats']:
+                if sort_formats and media_info['formats']:
                     self._sort_formats(media_info['formats'])
                 entries.append(media_info)
         return entries
