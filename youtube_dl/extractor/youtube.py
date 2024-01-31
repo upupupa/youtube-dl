@@ -3478,7 +3478,7 @@ class YoutubeTabIE(YoutubeBaseInfoExtractor):
             clip_times = (int_or_none(clip_data.get('startTimeMs')),
                           int_or_none(clip_data.get('endTimeMs')))
             if None not in clip_times:
-                self._downloader.params['_clip_args'] = f'{clip_times[0]}ms,{clip_times[1]}ms'
+                self._downloader.params['_clip_args'] = f'%dms,%dms' % clip_times
 
     def _real_extract(self, url):
         item_id = self._match_id(url)
